@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Voxel Web Game - Damian Kita</title>
+    <style>
+        :root {
+            --primary: #5c9e6f;
+            --dark: #2c3e50;
+            --light: #ecf0f1;
+            --danger: #e74c3c;
+            --ui-bg: rgba(0, 0, 0, 0.6);
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #87CEEB; /* Kolor nieba */
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Pozwala klikać w grę */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+        /* HUD */
+        #hud {
+            padding: 10px;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: auto;
+        }
+
+        .btn {
+            background: var(--ui-bg);
+            border: 2px solid white;
+            color: white;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: background 0.2s;
+            pointer-events: auto;
+        }
+        .btn:hover { background: rgba(255, 255, 255, 0.2); }
+        .btn:active { transform: scale(0.95); }
+
+        /* Start Screen */
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+            color: white;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+        }
+
+        h1 { margin-bottom: 10px; font-size: 3rem; text-transform: uppercase; letter-spacing: 5px; }
+        .info-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+            max-width: 600px;
+            line-height: 1.6;
+        }
+        .author-link {
+            color: var(--primary);
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        /* Inventory Bar */
+        #inventory {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            pointer-events: auto;
+        }
+        .slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #555;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            position: relative;
+        }
+        .slot.active { border-color: white; transform: scale(1.1); background: rgba(255,255,255,0.2); }
+        .slot-color { width: 30px; height: 30px; border: 1px solid rgba(0,0,0,0.5); }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            display: none; /* Hidden on desktop by default */
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            height: 150px;
+            pointer-events: none;
+            z-index: 15;
+        }
+
+        .joystick-area {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        .joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .action-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 70px;
+            height: 70px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid white;
+            border-radius: 50%;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            user-select: none;
+        }
+        
+        #btn-jump { right: 120px; background: rgba(92, 158, 111, 0.4); }
+        #btn-place { right: 30px; background: rgba(52, 152, 219, 0.4); }
+        #btn-break { bottom: 110px; right: 30px; width: 60px; height: 60px; background: rgba(231, 76, 60, 0.4); }
+
+        @media (max-width: 768px) {
+            #mobile-controls { display: block; }
+            #crosshair { display: block; } /* Mobile needs crosshair */
+            .desktop-hint { display: none; }
+            h1 { font-size: 2rem; }
+        }
+
+        /* Loading */
+        #loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 100;
+            transition: opacity 0.5s;
+        }
+    </style>
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="loader">Ładowanie świata...</div>
+
+    <div id="start-screen">
+        <h1>Voxel World</h1>
+        <div class="info-box">
+            <p>Eksploruj, buduj i niszcz w trybie pierwszoosobowym.</p>
+            <p class="desktop-hint"><strong>PC:</strong> WASD - Ruch | Mysz - Rozglądanie | LPM - Buduj | PPM - Niszcz | Spacja - Skok</p>
+            <p class="mobile-hint" style="display:none"><strong>Mobile:</strong> Lewy dżojstik - Ruch | Prawy ekran - Rozglądanie | Przyciski - Akcje</p>
+            <br>
+            <p>Autor: <a href="https://linktr.ee/kitadamian" target="_blank" class="author-link">Damian Kita</a></p>
+        </div>
+        <button class="btn" id="start-btn" style="font-size: 1.2rem; padding: 15px 40px;">Graj</button>
+    </div>
+
+    <div id="game-container"></div>
+
+    <div id="ui-layer">
+        <div id="hud">
+            <button class="btn" id="menu-btn">☰ Menu</button>
+            <div id="debug-info">FPS: 60</div>
+        </div>
+
+        <div id="crosshair"></div>
+
+        <div id="inventory">
+            <!-- Slots generated by JS -->
+        </div>
+
+        <div id="mobile-controls">
+            <div class="joystick-area" id="joystick">
+                <div class="joystick-knob" id="joystick-knob"></div>
+            </div>
+            <div class="action-btn" id="btn-jump">Skok</div>
+            <div class="action-btn" id="btn-break">🔨</div>
+            <div class="action-btn" id="btn-place">🧱</div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * KONFIGURACJA I ZMIENNE GLOBALNE
+         */
+        const config = {
+            gravity: 30,
+            speed: 8,
+            jumpForce: 12,
+            reach: 6,
+            chunkSize: 20, // Rozmiar początkowego obszaru
+            bgColor: 0x87CEEB
+        };
+
+        let camera, scene, renderer;
+        let controls;
+        let raycaster;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = false;
+        let prevTime = performance.now();
+        let velocity = new THREE.Vector3();
+        let direction = new THREE.Vector3();
+        
+        let objects = []; // Wszystkie bloki do kolizji i raycastu
+        let selectedBlockType = 'grass';
+        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        // Audio Context
+        let audioCtx;
+        let bgMusic;
+
+        // Touch state
+        let touchMove = { x: 0, y: 0 };
+        let touchLook = { x: 0, y: 0 };
+        
+        /**
+         * DEFINICJA BLOKÓW (Kolory i tekstury generowane proceduralnie)
+         */
+        const blockTypes = {
+            grass: { color: 0x567d46, name: 'Trawa' },
+            dirt: { color: 0x5d4037, name: 'Ziemia' },
+            stone: { color: 0x757575, name: 'Kamień' },
+            wood: { color: 0x5d4037, name: 'Drewno' }, // Ciemniejsze drewno
+            leaves: { color: 0x2e7d32, name: 'Liście', transparent: true },
+            brick: { color: 0xbcAAA4, name: 'Cegła' }
+        };
+
+        // Generowanie prostych tekstur canvas (żeby uniknąć zewnętrznych assetów)
+        function createTexture(color, noise = true) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Tło
+            ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+            ctx.fillRect(0, 0, 64, 64);
+
+            // Szum (Voxel look)
+            if (noise) {
+                for (let i = 0; i < 200; i++) {
+                    ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.2})`;
+                    ctx.fillRect(Math.random() * 64, Math.random() * 64, 4, 4);
+                    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.1})`;
+                    ctx.fillRect(Math.random() * 64, Math.random() * 64, 2, 2);
+                }
+            }
+            
+            // Obramowanie bloku
+            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(0,0,64,64);
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter; // Pixel art style
+            return tex;
+        }
+
+        const materials = {};
+        for (const [key, val] of Object.entries(blockTypes)) {
+            const map = createTexture(val.color);
+            materials[key] = new THREE.MeshLambertMaterial({ 
+                map: map, 
+                transparent: !!val.transparent,
+                opacity: val.transparent ? 0.9 : 1.0
+            });
+        }
+        // Specjalna tekstura dla drewna (pionowe paski)
+        {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#4e342e'; ctx.fillRect(0,0,64,64);
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            for(let i=0; i<64; i+=8) ctx.fillRect(i, 0, 2, 64);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            materials.wood.map = tex;
+        }
+
+        /**
+         * INICJALIZACJA GRY
+         */
+        function init() {
+            // Scene Setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(config.bgColor);
+            scene.fog = new THREE.Fog(config.bgColor, 20, 60);
+
+            // Camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.y = 5;
+
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: false }); // False dla retro looku i wydajności
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('game-container').appendChild(renderer.domElement);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+            dirLight.position.set(50, 100, 50);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+
+            // Raycaster
+            raycaster = new THREE.Raycaster();
+            raycaster.far = config.reach;
+
+            // Generate World
+            generateWorld();
+
+            // Setup UI Inventory
+            setupInventory();
+
+            // Event Listeners
+            window.addEventListener('resize', onWindowResize);
+            
+            if (!isMobile) {
+                setupDesktopControls();
+                document.querySelector('.mobile-hint').style.display = 'none';
+            } else {
+                setupMobileControls();
+                document.querySelector('.desktop-hint').style.display = 'none';
+                document.querySelector('.mobile-hint').style.display = 'block';
+            }
+
+            document.getElementById('loader').style.opacity = 0;
+            setTimeout(() => document.getElementById('loader').remove(), 500);
+        }
+
+        /**
+         * GENEROWANIE ŚWIATA
+         */
+        function generateWorld() {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            
+            // Podłoże (płaska powierzchnia)
+            for (let x = -config.chunkSize/2; x < config.chunkSize/2; x++) {
+                for (let z = -config.chunkSize/2; z < config.chunkSize/2; z++) {
+                    // Trawa
+                    createBlock(geometry, materials.grass, x, 0, z);
+                    // Losowe kamienie lub drzewa
+                    const rnd = Math.random();
+                    if (rnd > 0.95) {
+                        createBlock(geometry, materials.stone, x, 1, z);
+                    } else if (rnd > 0.90) {
+                        createTree(x, 1, z);
+                    }
+                }
+            }
+        }
+
+        function createBlock(geometry, material, x, y, z) {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.name = "block"; // Do identyfikacji
+            scene.add(mesh);
+            objects.push(mesh);
+            return mesh;
+        }
+
+        function createTree(x, y, z) {
+            // Pień
+            createBlock(new THREE.BoxGeometry(1,1,1), materials.wood, x, y, z);
+            createBlock(new THREE.BoxGeometry(1,1,1), materials.wood, x, y+1, z);
+            createBlock(new THREE.BoxGeometry(1,1,1), materials.wood, x, y+2, z);
+            // Liście
+            for(let lx=-1; lx<=1; lx++) {
+                for(let lz=-1; lz<=1; lz++) {
+                    for(let ly=0; ly<=1; ly++) {
+                        if(lx===0 && lz===0 && ly===0) continue; // Nie zastępuj pnia
+                        createBlock(new THREE.BoxGeometry(1,1,1), materials.leaves, x+lx, y+3+ly, z+lz);
+                    }
+                }
+            }
+        }
+
+        /**
+         * KONTROLKI PC (PointerLock)
+         */
+        function setupDesktopControls() {
+            // PointerLockControls implementation manually or via simplified logic
+            // Here we implement raw pointer lock for max control
+            
+            const canvas = renderer.domElement;
+
+            canvas.addEventListener('click', () => {
+                if (document.pointerLockElement !== canvas) {
+                    canvas.requestPointerLock();
+                } else {
+                    performAction();
+                }
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement === canvas) {
+                    document.getElementById('start-screen').style.display = 'none';
+                } else {
+                    // Paused
+                }
+            });
+
+            document.addEventListener('mousemove', (event) => {
+                if (document.pointerLockElement === canvas) {
+                    camera.rotation.y -= event.movementX * 0.002;
+                    camera.rotation.x -= event.movementY * 0.002;
+                    camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+                }
+            });
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', (e) => {
+                if(document.pointerLockElement === canvas) {
+                    if(e.button === 0) performAction('place'); // LPM
+                    if(e.button === 2) performAction('break'); // RPM
+                }
+            });
+            document.addEventListener('contextmenu', e => e.preventDefault());
+        }
+
+        /**
+         * KONTROLKI MOBILE (Joystick i Touch)
+         */
+        function setupMobileControls() {
+            const joystick = document.getElementById('joystick');
+            const knob = document.getElementById('joystick-knob');
+            let joystickCenter = { x: 0, y: 0 };
+
+            joystick.addEventListener('touchstart', (e) => {
+                const touch = e.changedTouches[0];
+                const rect = joystick.getBoundingClientRect();
+                joystickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+                updateJoystick(touch);
+            }, {passive: false});
+
+            joystick.addEventListener('touchmove', (e) => {
+                e.preventDefault(); // Zapobieganie scrollowaniu
+                updateJoystick(e.changedTouches[0]);
+            }, {passive: false});
+
+            joystick.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                touchMove.x = 0;
+                touchMove.y = 0;
+                knob.style.transform = `translate(-50%, -50%)`;
+            });
+
+            function updateJoystick(touch) {
+                const maxDist = 35;
+                let dx = touch.clientX - joystickCenter.x;
+                let dy = touch.clientY - joystickCenter.y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                if (dist > maxDist) {
+                    const angle = Math.atan2(dy, dx);
+                    dx = Math.cos(angle) * maxDist;
+                    dy = Math.sin(angle) * maxDist;
+                }
+
+                knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                
+                // Normalizacja wejścia (-1 do 1)
+                touchMove.x = dx / maxDist;
+                touchMove.y = dy / maxDist;
+            }
+
+            // Touch Look (Right side of screen)
+            let lastTouchX = 0;
+            let lastTouchY = 0;
+            
+            document.addEventListener('touchstart', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.clientX > window.innerWidth / 2 && t.target.tagName !== 'BUTTON' && t.target.id !== 'joystick' && t.target.id !== 'joystick-knob' && t.target.parentElement.className !== 'slot') {
+                        lastTouchX = t.clientX;
+                        lastTouchY = t.clientY;
+                    }
+                }
+            });
+
+            document.addEventListener('touchmove', (e) => {
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.clientX > window.innerWidth / 2 && t.target.tagName !== 'BUTTON' && t.target.id !== 'joystick') {
+                        const deltaX = t.clientX - lastTouchX;
+                        const deltaY = t.clientY - lastTouchY;
+                        
+                        camera.rotation.y -= deltaX * 0.005;
+                        camera.rotation.x -= deltaY * 0.005;
+                        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+
+                        lastTouchX = t.clientX;
+                        lastTouchY = t.clientY;
+                    }
+                }
+            });
+
+            // Action Buttons
+            document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (canJump) {
+                    velocity.y = config.jumpForce;
+                    canJump = false;
+                    playSound('jump');
+                }
+            });
+            document.getElementById('btn-place').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                performAction('place');
+            });
+            document.getElementById('btn-break').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                performAction('break');
+            });
+        }
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'ArrowUp': case 'KeyW': moveForward = true; break;
+                case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
+                case 'ArrowDown': case 'KeyS': moveBackward = true; break;
+                case 'ArrowRight': case 'KeyD': moveRight = true; break;
+                case 'Space': 
+                    if (canJump) {
+                        velocity.y = config.jumpForce;
+                        canJump = false;
+                        playSound('jump');
+                    }
+                    break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp': case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown': case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight': case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        /**
+         * LOGIKA GRY (UPDATE)
+         */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if (document.getElementById('start-screen').style.display === 'none') {
+                // Ruch
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= config.gravity * delta; // Grawitacja
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize(); // Zapobiega szybszemu ruchowi po przekątnej
+
+                // Mobile input override
+                if (isMobile) {
+                    direction.z = -touchMove.y;
+                    direction.x = touchMove.x;
+                }
+
+                if (moveForward || moveBackward || moveLeft || moveRight || (isMobile && (touchMove.x !== 0 || touchMove.y !== 0))) {
+                    velocity.z -= direction.z * config.speed * 10.0 * delta; // Ujemne bo kamera patrzy w -Z
+                    velocity.x -= direction.x * config.speed * 10.0 * delta;
+                }
+
+                // Aplikacja ruchu i kolizje (uproszczone AABB)
+                // X
+                camera.translateX(-velocity.x * delta);
+                if(checkCollision()) camera.translateX(velocity.x * delta); // Cofnij jeżeli kolizja
+                
+                // Z
+                camera.translateZ(velocity.z * delta);
+                if(checkCollision()) camera.translateZ(-velocity.z * delta);
+
+                // Y (Grawitacja)
+                camera.position.y += velocity.y * delta;
+                
+                // Kolizja z podłogą
+                if (checkCollision()) {
+                    camera.position.y -= velocity.y * delta;
+                    velocity.y = 0;
+                    // Prosta detekcja "ziemi"
+                    // Sprawdzamy czy jest coś pod stopami
+                    camera.position.y -= 0.1; 
+                    if (checkCollision()) {
+                        camera.position.y += 0.1;
+                        canJump = true;
+                    } else {
+                        // W powietrzu
+                        canJump = false;
+                    }
+                }
+                
+                // Ochrona przed spadaniem w nieskończoność
+                if (camera.position.y < -10) {
+                    camera.position.set(0, 10, 0);
+                    velocity.y = 0;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Prosta kolizja oparta na promieniu i pozycji gracza
+        function checkCollision() {
+            const playerBox = new THREE.Box3();
+            // Gracz ma wysokość 1.8, szerokość 0.6
+            playerBox.setFromCenterAndSize(camera.position, new THREE.Vector3(0.6, 1.8, 0.6));
+
+            for (const obj of objects) {
+                if (playerBox.intersectsBox(new THREE.Box3().setFromObject(obj))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * INTERAKCJA (BUDOWANIE / NISZCZENIE)
+         */
+        function performAction(forceType = null) {
+            // Raycast from center of screen
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(objects);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const type = forceType || (isMobile ? 'place' : 'break'); // Domyślnie na PC LPM nic nie robi, trzeba ustalić logikę. LPM = place, RPM = break
+                
+                // Jeśli kliknięto, akcja zależy od tego co chcemy zrobić (domyślnie place)
+                // Jednak standardowo: LPM w Minecraft to niszczenie. Zmieńmy logikę.
+                // W setupDesktopControls: LPM=place, RPM=break. Odwóćmy dla intuicji:
+                // LPM -> Break, RPM -> Place. (Ale w setupie wyżej było odwrotnie. Poprawmy w setupie lub tu).
+                // Zostawmy: LPM=Place, RPM=Break (opcja "Creative" często ma LPM place).
+                
+                if (type === 'break') {
+                    // Usuń blok
+                    scene.remove(intersect.object);
+                    objects.splice(objects.indexOf(intersect.object), 1);
+                    playSound('break');
+                } else if (type === 'place') {
+                    // Postaw blok
+                    const pos = intersect.point.add(intersect.face.normal.multiplyScalar(0.5)).floor().addScalar(0.5);
+                    
+                    // Nie stawiaj wewnątrz siebie
+                    const playerPos = camera.position.clone();
+                    const dist = pos.distanceTo(playerPos);
+                    if (dist > 1.2) {
+                        const geometry = new THREE.BoxGeometry(1, 1, 1);
+                        const material = materials[selectedBlockType];
+                        createBlock(geometry, material, pos.x, pos.y, pos.z);
+                        playSound('build');
+                    }
+                }
+            }
+        }
+        
+        // Poprawka logiki kliknięć PC:
+        document.addEventListener('mousedown', (e) => {
+             if(document.pointerLockElement !== renderer.domElement) return;
+             if(e.button === 0) performAction('break'); // LPM niszczy
+             if(e.button === 2) performAction('place'); // RPM buduje
+        });
+        document.getElementById('btn-place').onclick = () => performAction('place');
+        document.getElementById('btn-break').onclick = () => performAction('break');
+
+
+        /**
+         * SYSTEM EKWIPUNKU (UI)
+         */
+        function setupInventory() {
+            const inv = document.getElementById('inventory');
+            const keys = Object.keys(blockTypes);
+            
+            keys.forEach((key, index) => {
+                const slot = document.createElement('div');
+                slot.className = `slot ${index === 0 ? 'active' : ''}`;
+                slot.dataset.type = key;
+                
+                const color = document.createElement('div');
+                color.className = 'slot-color';
+                color.style.backgroundColor = '#' + blockTypes[key].color.toString(16).padStart(6, '0');
+                
+                slot.appendChild(color);
+                
+                slot.addEventListener('click', () => {
+                    document.querySelectorAll('.slot').forEach(s => s.classList.remove('active'));
+                    slot.classList.add('active');
+                    selectedBlockType = key;
+                });
+                
+                // Numerki klawiatury
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === String(index + 1)) slot.click();
+                });
+
+                inv.appendChild(slot);
+            });
+        }
+
+        /**
+         * SYSTEM DŹWIĘKOWY (Web Audio API)
+         */
+        function initAudio() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new AudioContext();
+            
+            // Muzyka w tle (z zewnętrznego źródła, fallback do ciszy)
+            bgMusic = new Audio('https://cdn.pixabay.com/download/audio/2022/03/24/audio_0f3d46360c.mp3?filename=lofi-study-112191.mp3');
+            bgMusic.loop = true;
+            bgMusic.volume = 0.3;
+            
+            // Obsługa autoplay policy
+            document.body.addEventListener('click', () => {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                if (bgMusic.paused) {
+                    bgMusic.play().catch(e => console.log("Audio autoplay blocked, interact again"));
+                }
+            }, { once: true });
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'break') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.1);
+                gain.gain.setValueAtTime(0.5, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'build') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'jump') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(300, now + 0.1);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            }
+        }
+
+        /**
+         * OBSŁUGA OKNA I MENU
+         */
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Start Game
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('start-screen').style.display = 'none';
+            initAudio();
+            if (!isMobile) {
+                renderer.domElement.requestPointerLock();
+            }
+        });
+
+        document.getElementById('menu-btn').addEventListener('click', () => {
+            document.exitPointerLock();
+            document.getElementById('start-screen').style.display = 'flex';
+        });
+
+        // Start
+        init();
+        animate();
+
+    </script>
+</body>
+</html>
